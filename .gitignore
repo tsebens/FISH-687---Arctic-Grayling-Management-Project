@@ -1,2 +1,6 @@
 Readings/
 .gitignore.bak
+.Rproj.user/
+.Rhistory
+.RData
+~$*
