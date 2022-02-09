@@ -16,10 +16,25 @@ sh_1998 =
     skip=1
   ) %>%
   magrittr::set_colnames(
-    field_names
+    c(
+      "litho",
+      "line",
+      "page",
+      "date",
+      "river",
+      "sublocation",
+      "river_mile",
+      "crew",
+      "event",
+      "fly_jig",
+      "length",
+      "tag_number",
+      "tag_color",
+      "age"
+    )
   ) %>% 
   dplyr::select(date, sublocation, river_mile, length, age) %>% 
-  mutate(date = as.Date(as.numeric(e$date), origin = as.Date("1899-12-30"))) %>% 
+  mutate(date = as.Date(as.numeric(date), origin = as.Date("1899-12-30"))) %>% 
   cbind(year = 1998)
   
   
@@ -110,7 +125,7 @@ dat = plyr::rbind.fill(
 
 
 ```{r}
-
+dat
 ```
 
 
