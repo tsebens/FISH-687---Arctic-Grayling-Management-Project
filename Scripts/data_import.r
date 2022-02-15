@@ -114,7 +114,7 @@ sh_2006 = read_excel(
   mutate(
     date = as.Date(date),
     # This is a decision we should make as a group: Most of the age records for 2006 are recorded as 3+_, 4+, 6+ etc. I don't see the statistical use in the +, so I've removed it, but there is some information being lost here
-    age = str_replace(sh_2006$age, fixed("+"), "")
+    age = str_replace(age, fixed("+"), "")
   ) %>% 
   cbind(year = 2006)
 
