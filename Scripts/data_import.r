@@ -128,7 +128,7 @@ dat = plyr::rbind.fill(
 ) %>% 
   # Change rows to appropriate types
   dplyr::mutate(
-    year = as.numeric(year),
+    year = factor(year),
     sublocation = as.numeric(sublocation),
     river_mile = as.numeric(river_mile),
     length = as.numeric(length),
