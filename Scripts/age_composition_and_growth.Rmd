@@ -1,0 +1,179 @@
+```{r setup, messages=F}
+library(tidyverse)
+library(ggplot2)
+library(bbmle)
+
+source(file = file.path(here::here(), "Scripts", "data_import.r"))
+```
+
+```{r}
+dat
+```
+
+
+
+
+First look at available age composition data.
+
+To me it looks like ages 1-4 are pretty underrepresented, most likely due to their low vulnerability to used gear.
+Additionally, there's only one record of a 14yo fish, so we can exclude that. That leaves us with ages 5-13 for our age composition analysis
+```{r}
+dat %>% 
+  ggplot(aes(age)) + 
+  geom_histogram() + 
+  theme_light() + 
+  labs(title = "Age Distribution of Captured Arctic Grayling", x = "Age", y = "")
+```
+
+
+
+We'll also take a look at length at age.
+
+Looks pretty standard, a good candidate for fitting a growth curve: no obvious outliers or artefacts
+```{r}
+dat %>% 
+  ggplot(aes(age, length)) + 
+  geom_point()
+```
+
+Let's try a first pass at fitting a growth curve
+```{r}
+
+# We'll need to create a subset of the data with no missing values
+dat_vbl = 
+  dat %>% 
+  # We'll remove the first 4 years and the last 1 year of ages b/c of gear sensitivity and lack of data, respectively
+  filter(age > 4, age < 14) %>% 
+  select(age, length) %>% 
+  drop_na()
+
+# Define the functions we'll need for the optimizer
+
+# We'll use the Von-Bertalanffey growth function
+vbl = function(t, t_0, K, L_inf) {
+  return(
+    L_inf * (1 - exp(-K * (t - t_0)))
+  )
+}
+
+# The negative log likelihood function for VBL
+vbl_nll = function(obs_age, obs_len, sigma, t_0, K, L_inf, .log=TRUE) {
+  pred_len = vbl(obs_age, t_0, K, L_inf)
+  return(
+    -1 * sum(
+      dnorm(
+        x = obs_len, 
+        mean = pred_len,
+        sd = sigma,
+        log = .log
+      ),
+      na.rm = T
+    )
+  )
+}
+```
+Let's get some estimates for our starting values
+```{r}
+# Define our guesses for the initial values
+t_0_i = 0
+K_i = .25
+L_inf_i = 420 
+sigma_i = 10
+
+age_range = seq(min(dat$age, na.rm = T), max(dat$age, na.rm = T))
+  
+dat %>% 
+  ggplot(aes(age, length)) + 
+  geom_point() + 
+  geom_line(
+    data = data.frame(
+      age = age_range, 
+      length = vbl(age_range, t_0 = t_0_i, K = K_i, L_inf = L_inf_i)
+    )
+  )
+```
+
+That seems pretty decent, now let's run it through the optimizer
+```{r}
+
+# Now we can fit using a non-linear optimizer (a blazing fast guess ad checker)
+fit = mle2(
+  vbl_nll,
+  data = list(
+    obs_age = dat_vbl$age,
+    obs_len = dat_vbl$length,
+    log = T
+  ),
+  start = list(
+    sigma = sigma_i,
+    t_0 = t_0_i,
+    K = K_i,
+    L_inf = L_inf_i
+  ),
+  method="Nelder-Mead"
+)
+
+# Let's extract the estimated coefficients from our optimized fit
+(sigma_p = coef(fit)['sigma'])
+(t_0_p = coef(fit)['t_0'])
+(K_p = coef(fit)['K'])
+(L_inf_p = coef(fit)['L_inf'])
+
+dat %>% 
+  ggplot(aes(age, length)) + 
+  geom_point() + 
+  geom_line(
+    data = data.frame(
+      age = age_range, 
+      length = vbl(age_range, t_0 = t_0_p, K = K_p, L_inf = L_inf_p)
+    )
+  ) + 
+  geom_ribbon(
+    data = data.frame(
+      age = age_range, 
+      length = vbl(age_range, t_0 = t_0_p, K = K_p, L_inf = L_inf_p)
+    ),
+    aes(
+      ymin = length - 1.96 * sigma_p,
+      ymax = length + 1.96 * sigma_p,
+      fill = "95% C.I."
+    ),
+    alpha = 0.3
+  ) +
+  geom_ribbon(
+    data = data.frame(
+      age = age_range, 
+      length = vbl(age_range, t_0 = t_0_p, K = K_p, L_inf = L_inf_p)
+    ),
+    aes(
+      ymin = length - 0.674 * sigma_p,
+      ymax = length + 0.674 * sigma_p,
+      fill = "50% C.I."
+    ),
+    alpha = 0.3
+  ) +
+  # Write the estimates of the critical coefficients onto the plot
+  annotate(
+    geom="text", x=12, y=250, 
+    label = paste(
+      "Estimated Coefficients",
+      # paste("Sigma:", sigma_p),
+      # paste("t_0:", t_0_p),
+      paste("Growth (K):", round(K_p, 4)),
+      paste("Max Size (L_inf):", round(L_inf_p, 2)),
+      sep = "\n"
+    )
+  ) +
+  theme_light() + 
+  labs(
+    title = "Length-at-Age", 
+    subtitle = "Von-Bertalanffey", 
+    x = "Age (Years)", 
+    y="Length (mm)"
+  ) + 
+  scale_fill_discrete(name = "Confidence Intervals")
+```
+
+
+
+
