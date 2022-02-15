@@ -1,0 +1,106 @@
+```{r setup, message=FALSE}
+library(ggplot)
+
+source(file = file.path(here::here(), "Scripts", "data_import.r"))
+```
+
+
+First look at the data
+```{r}
+dat %>% 
+  select(age) %>% 
+  # Filter out the first 4 years because of apparent gear selectivity, and the last age because we only have one sample
+  drop_na %>% 
+  group_by(age) %>% 
+  summarize(n = length(age)) %>% 
+  ggplot(aes(age, n)) + 
+  geom_line()
+```
+
+Looks like fish aren't fully recruited to the gear until age 5. We also have only 1 record of a 14yo fish.
+```{r}
+age_dat = dat %>% 
+    select(age) %>% 
+    # Filter out the first 4 years because of apparent gear selectivity, and the last age because we only have one sample
+    filter(between(age, 5, 13)) %>% 
+    drop_na %>% 
+    group_by(age) %>% 
+    summarize(n = length(age)) %>% 
+    mutate(ln_n = log(n))
+
+
+fit = lm(
+  ln_n ~ age,
+  data = age_dat
+)
+
+Z = -coef(fit)["age"]
+```
+
+
+Some figures to show our work
+```{r}
+mort_label = paste("Estimated Mortality: (Z)", round(Z, 4))
+
+age_dat %>% 
+  ggplot(aes(age, n)) + 
+  geom_line(
+    aes(color = "observed")
+  ) + 
+  geom_line(
+    data = data.frame(
+      age = age_dat$age %>% unique,
+      n = exp(
+        predict(
+          fit, 
+          newdata = data.frame(
+            age = age_dat$age %>% unique
+          )
+        )
+      )
+    ),
+    aes(color = "fit")
+  ) + 
+  annotate(
+    geom="text",
+    x = 10, y = 400,
+    label = mort_label
+  ) + 
+  theme_light() + 
+  labs(
+    title = "Age-Composition Estimate of Mortality",
+    subtitle = "Mortality estimated as the slope of the descending right limb of the log(catch) curve",
+    x = "Age",
+    y = "Catch"
+  ) + 
+  scale_color_discrete(name = "Slope")
+
+
+age_dat %>% 
+  ggplot(aes(age, ln_n)) + 
+  geom_line(
+    aes(color = "observed")
+  ) + 
+  geom_line(
+    data = data.frame(
+      age = age_dat %>% select(age) %>% unique,
+      ln_n = predict(fit, newdata = age_dat %>% select(age) %>% unique)
+    ),
+    aes(color = "fit")
+  ) + 
+  annotate(
+    geom="text",
+    x = 7, y = 4,
+    label = mort_label
+  ) + 
+  theme_light() + 
+  labs(
+    title = "Age-Composition Estimate of Mortality",
+    subtitle = "Mortality estimated as the slope of the descending right limb of the log(catch) curve",
+    x = "Age",
+    y = "ln(Catch)"
+  ) + 
+  scale_color_discrete(name = "Slope")
+```
+
+
